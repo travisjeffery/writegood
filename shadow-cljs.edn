@@ -1,0 +1,17 @@
+{:lein   true
+
+ :nrepl {:port 8777}
+
+ :builds {:app {:target          :browser
+                :output-dir      "resources/public/js/compiled"
+                :asset-path      "/js/compiled"
+                :dev             {:modules          {:app {:entries [devtools.preload
+                                                                     writegood.core]}}}
+                :release         {:modules          {:app {:entries [writegood.core]}}
+                                  :compiler-options {:optimizations :advanced
+                                                     :pretty-print  false
+                                                     :closure-defines {goog.DEBUG                           false}}}
+                :devtools        {:http-root    "resources/public"
+                                  :http-port    8280
+                                  :preloads     [devtools.preload]
+                                  :after-load   writegood.core/mount-root}}}}

@@ -1,0 +1,8 @@
+/*.log
+/target
+/*-init.clj
+/resources/public/*
+out
+/node_modules
+.shadow-cljs
+.lsp
