@@ -12,9 +12,7 @@
 (defn textarea []
   (let [text (r/atom "")]
     (fn []
-      [:textarea {:value @text
-                  :on-change #(reset! text (-> % .-target .-value))
-                  :placeholder "Write..."}])))
+      [:trix-editor])))
 
 (defn main-panel []
   [textarea])
