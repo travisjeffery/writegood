@@ -5,6 +5,17 @@
   "dependencies":{
     "create-react-class": "^15.6.3",
     "react": "^16.8.6",
-    "react-dom": "^16.8.6"
+    "react-dom": "^16.8.6",
+    "@convertkit/slate-lists": "^0.2.4",
+    "antd": "^3.22.0",
+    "babel-loader": "^8.0.6",
+    "immutable": "^3.8.2",
+    "slate": "^0.47.6",
+    "slate-drop-or-paste-images": "^0.9.1",
+    "slate-no-empty": "^0.1.0",
+    "slate-paste-linkify": "^0.7.0",
+    "slate-react": "^0.22.6",
+    "webpack": "^4.39.2",
+    "webpack-cli": "^3.3.7"
   }
 }

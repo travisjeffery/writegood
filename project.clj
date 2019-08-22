@@ -7,6 +7,7 @@
                  [reagent "0.8.1"]
                  [re-frame "0.10.8"]
                  [garden "1.3.9"]
+                 [com.walmartlabs/lacinia "0.34.0"]
                  [ns-tracker "0.4.0"]]
 
   :plugins [[lein-garden "0.2.8"]]
