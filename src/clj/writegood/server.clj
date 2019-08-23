@@ -12,7 +12,7 @@
                             :schema
                             (lp/service-map {:graphiql true})
                             http/create-server
-                            http/server)))
+                            http/start)))
 
   (stop [this]
     (http/stop server)
