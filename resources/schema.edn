@@ -10,7 +10,7 @@
   {:description "Documents written by users.",
    :fields
    {:id {:type (non-null ID)}
-    :author {:type (non-null ID)}
+    :author_id {:type (non-null ID)}
     :text {:type (non-null String)}}
    }}
  :queries
@@ -18,4 +18,13 @@
   {:type :user,
    :description "Get a user by id.",
    :args {:id {:type ID}},
-   :resolve :query/user-by-id}}}
+   :resolve :query/user-by-id}}
+ :mutations
+ {:upsert_document
+  {:type document
+   :description "Creates or updates a document."
+   :args
+   {:id {:type (non-null ID)}
+    :author_id {:type (non-null ID)}
+    :text {:type (non-null String)}}
+   :resolve :mutation/upsert-document}}}

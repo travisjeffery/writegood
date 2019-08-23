@@ -10,6 +10,7 @@
                  [clj-time "0.15.2"]
                  [com.walmartlabs/lacinia-pedestal "0.5.0"]
                  [io.aviso/logging "0.2.0"]
+                 [com.stuartsierra/component "0.4.0"]
                  [garden "1.3.9"]
                  [com.walmartlabs/lacinia "0.34.0"]
                  [ns-tracker "0.4.0"]]
