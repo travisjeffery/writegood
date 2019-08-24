@@ -4,7 +4,6 @@
    [writegood.db :as db]
    [com.walmartlabs.lacinia.util :as util]
    [com.walmartlabs.lacinia.schema :as schema]
-   [com.walmartlabs.lacinia.resolve :refer [resolve-as]]
    [com.stuartsierra.component :as component]
    [clojure.edn :as edn]))
 
@@ -31,19 +30,9 @@
            author-id :author_id
            text :text} args
           document (db/find-document-by-id db document-id)]
-      (cond
-        (nil? author-id)
-        (resolve-as nil {:message "Author not found."
-                         :status 404})
-
-        (nil? text)
-        (resolve-as nil {:message "Text must be non-empty."
-                         :status 400})
-
-        :else
-        (do
-          (db/upsert-document db author-id document-id text)
-          document)))))
+      (do
+        (db/upsert-document db author-id document-id text)
+        document))))
 
 (defn resolver-map
   [component]

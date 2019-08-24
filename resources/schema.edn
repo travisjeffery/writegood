@@ -2,29 +2,29 @@
  {:user
   {:description "People who use the service.",
    :fields
-   {:id {:type (non-null ID)},
+   {:id {:type (non-null Int)},
     :email {:type (non-null String)}
     :documents {:type (list :document)
                 :resolve :query/documents-by-user}}},
   :document
   {:description "Documents written by users.",
    :fields
-   {:id {:type (non-null ID)}
-    :author_id {:type (non-null ID)}
+   {:id {:type (non-null Int)}
+    :author_id {:type (non-null Int)}
     :text {:type (non-null String)}}
    }}
  :queries
  {:user_by_id
   {:type :user,
    :description "Get a user by id.",
-   :args {:id {:type ID}},
+   :args {:id {:type Int}},
    :resolve :query/user-by-id}}
  :mutations
  {:upsert_document
   {:type document
    :description "Creates or updates a document."
    :args
-   {:id {:type (non-null ID)}
-    :author_id {:type (non-null ID)}
+   {:id {:type (non-null Int)}
+    :author_id {:type (non-null Int)}
     :text {:type (non-null String)}}
    :resolve :mutation/upsert-document}}}
