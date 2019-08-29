@@ -1,7 +1,7 @@
 {:users
- [{:id "1", :email "tj@example.com"}
-  {:id "2", :email "callie@example.com"}
-  {:id "3", :email "emily@example.com"}]
+ [{:id 1, :email "tj@example.com"}
+  {:id 2, :email "callie@example.com"}
+  {:id 3, :email "emily@example.com"}]
  :documents
- [{:id "1" :author_id "1" :text "Hello, world"}
-  {:id "2" :author_id "2" :text "Hello, world"}]}
+ [{:id 1 :author_id 1 :text "Hello, world"}
+  {:id 1 :author_id 1 :text "Hello, world"}]}

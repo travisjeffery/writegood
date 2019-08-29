@@ -10,4 +10,6 @@
     <appender-ref ref="STDOUT"/>
   </root>
 
+  <logger name="writegood.db" level="DEBUG" />
+
 </configuration>

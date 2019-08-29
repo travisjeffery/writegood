@@ -10,7 +10,7 @@
 (defn user-documents
   [db]
   (fn [_ _ user]
-    (db/list-documents-for-user db (:id user))))
+    (db/list-documents-for-author db (:id user))))
 
 (defn user-by-id
   [db]
@@ -37,9 +37,9 @@
 (defn resolver-map
   [component]
   (let [db (:db component)]
-    {:query/user-by-id (user-by-id db)
-     :query/documents-by-user (user-documents db)
-     :mutation/upsert-document (upsert-document db)}))
+    {:query/user-by-id          (user-by-id db)
+     :query/documents-by-author (user-documents db)
+     :mutation/upsert-document  (upsert-document db)}))
 
 (defn load-schema
   [component]

@@ -9,7 +9,6 @@ EOF
 docker exec -i writegood_db_1 psql -Uwritegood_role writegooddb -a <<EOF
 drop table if exists users;
 drop table if exists documents;
-EOF
 
 create or replace function maintain_updated_at()
 returns trigger as \$\$
@@ -39,11 +38,11 @@ create table documents (
 create trigger documents_updated_at before update on documents for each row execute procedure maintain_updated_at();
 
 insert into users (id, email) values
-(1, "tj@example.com"),
-(2, "callie@example.com");
+(1, 'tj@example.com'),
+(2, 'callie@example.com');
 
 insert into documents (id, author_id, text) values
-(1, 1, "TJ's note."),
-(2, 2, "Callie's note."),
+(1, 1, 'TJs note.'),
+(2, 2, 'Callies note.');
 
 EOF

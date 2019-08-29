@@ -7,3 +7,4 @@ out
 .shadow-cljs
 .lsp
 .nrepl-port
+.idea
