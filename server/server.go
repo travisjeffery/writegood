@@ -27,9 +27,13 @@ type Document struct {
 	AuthorID int    `json:"author_id"`
 }
 
-type Server struct {
+type Config struct {
 	Connect    string
 	Migrations string
+}
+
+type Server struct {
+	Config Config
 
 	conn     *pgx.Conn
 	router   *mux.Router
@@ -40,7 +44,7 @@ type Server struct {
 func (s *Server) Run() error {
 	ctx := context.Background()
 	var err error
-	s.conn, err = pgx.Connect(ctx, s.Connect)
+	s.conn, err = pgx.Connect(ctx, s.Config.Connect)
 
 	if err != nil {
 		log.Fatalf("[error] failed to connect to database: %v", err)
@@ -154,16 +158,30 @@ func (s *Server) Run() error {
 		log.Fatalf("[error] failed to create schema: %v", err)
 	}
 
+	type jsonQuery struct {
+		Query string `json:"query"`
+	}
+
 	s.router = mux.NewRouter()
 	s.router.HandleFunc("/graphql", func(w http.ResponseWriter, r *http.Request) {
 		query := r.URL.Query().Get("query")
+		// TODO: better way to handle this?
+		if r.Header.Get("Content-Type") == "application/json" {
+			var q jsonQuery
+			if err := json.NewDecoder(r.Body).Decode(&q); err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			query = q.Query
+		}
 		log.Printf("[debug] graphql: %s", query)
 		result := s.ExecuteQuery(query, schema)
 		if err := json.NewEncoder(w).Encode(result); err != nil {
 			log.Printf("[error] failed to encode json: %v", err)
 		}
 	})
-	s.router.Handle("/", http.FileServer(http.Dir("./dist")))
+	fs := http.FileServer(http.Dir("dist"))
+	s.router.PathPrefix("/").Handler(http.StripPrefix("/", fs))
 
 	s.shutdown = make(chan struct{}, 1)
 	defer func() { <-s.shutdown }()
@@ -177,7 +195,7 @@ func (s *Server) Shutdown() {
 }
 
 func (s *Server) MustMigrate() {
-	m, err := migrate.New(s.Migrations, s.Connect)
+	m, err := migrate.New(s.Config.Migrations, s.Config.Connect)
 	if err != nil {
 		log.Fatalf("[error] failed to create migrate instance: %v", err)
 	}

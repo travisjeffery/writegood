@@ -7,6 +7,16 @@ import { Value } from 'slate'
 import PasteLinkify from 'slate-paste-linkify'
 import NoEmpty from 'slate-no-empty'
 import Lists from '@convertkit/slate-lists'
+import ApolloClient from 'apollo-boost'
+import { gql } from "apollo-boost"
+
+const client = new ApolloClient({
+  uri: 'http://localhost:8080/graphql',
+});
+
+client.
+  query({query: gql`{user(id:1){id email}}`})
+  .then(result => console.log(result.data));
 
 // Create our initial value...
 const initialValue = Value.fromJSON({

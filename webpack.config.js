@@ -1,5 +1,5 @@
 module.exports = {
-  context: __dirname + "/app",
+  context: __dirname + "/client",
   entry: "./app.js",
   mode: 'development',
 

@@ -4,25 +4,22 @@ import (
 	"flag"
 	"log"
 
+	"github.com/davecgh/go-spew/spew"
 	"github.com/travisjeffery/writegood/server"
 )
 
 func main() {
-	connect := flag.String("connect", "", "db connect string")
-	migrations := flag.String("migrations", "", "migrations src")
+	var config server.Config
+
+	flag.StringVar(&config.Connect, "connect", "", "db connect string")
+	flag.StringVar(&config.Migrations, "migrations", "", "migrations src")
 
 	flag.Parse()
 
-	log.Printf(`[info] config:
-	migrations: %s
-	connect: %s
-`,
-		*migrations,
-		*connect)
+	log.Printf("[info] config:\n%s", spew.Sdump(config))
 
 	s := &server.Server{
-		Connect:    *connect,
-		Migrations: *migrations,
+		Config: config,
 	}
 
 	s.MustMigrate()
