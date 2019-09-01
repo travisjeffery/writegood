@@ -16,15 +16,15 @@ import (
 )
 
 type User struct {
-	ID        int
-	Email     string
-	Documents []Document
+	ID        int        `json:"id"`
+	Email     string     `json:"email"`
+	Documents []Document `json:"documents"`
 }
 
 type Document struct {
-	ID       int
-	Text     string
-	AuthorID int
+	ID       int    `json:"id"`
+	Text     string `json:"text"`
+	AuthorID int    `json:"author_id"`
 }
 
 type Server struct {
@@ -52,10 +52,13 @@ func (s *Server) Run() error {
 			Name: "Document",
 			Fields: graphql.Fields{
 				"id": &graphql.Field{
-					Type: graphql.Int,
+					Type: graphql.NewNonNull(graphql.Int),
 				},
 				"text": &graphql.Field{
-					Type: graphql.String,
+					Type: graphql.NewNonNull(graphql.String),
+				},
+				"author_id": &graphql.Field{
+					Type: graphql.NewNonNull(graphql.Int),
 				},
 			},
 		},
@@ -66,10 +69,10 @@ func (s *Server) Run() error {
 			Name: "User",
 			Fields: graphql.Fields{
 				"id": &graphql.Field{
-					Type: graphql.Int,
+					Type: graphql.NewNonNull(graphql.Int),
 				},
 				"email": &graphql.Field{
-					Type: graphql.String,
+					Type: graphql.NewNonNull(graphql.String),
 				},
 				"documents": &graphql.Field{
 					Type:    graphql.NewList(documentType),
@@ -100,15 +103,56 @@ func (s *Server) Run() error {
 	var mutationType = graphql.NewObject(
 		graphql.ObjectConfig{
 			Name: "Mutation",
+			Fields: graphql.Fields{
+				"createUser": &graphql.Field{
+					Type:        userType,
+					Description: "Create a user.",
+					Args: graphql.FieldConfigArgument{
+						"email": &graphql.ArgumentConfig{
+							Type: graphql.NewNonNull(graphql.String),
+						},
+					},
+					Resolve: s.CreateUser,
+				},
+				"createDocument": &graphql.Field{
+					Type:        documentType,
+					Description: "Create a document.",
+					Args: graphql.FieldConfigArgument{
+						"text": &graphql.ArgumentConfig{
+							Type: graphql.NewNonNull(graphql.String),
+						},
+						"author_id": &graphql.ArgumentConfig{
+							Type: graphql.NewNonNull(graphql.Int),
+						},
+					},
+					Resolve: s.CreateDocument,
+				},
+				"updateDocument": &graphql.Field{
+					Type:        documentType,
+					Description: "Update a document.",
+					Args: graphql.FieldConfigArgument{
+						"text": &graphql.ArgumentConfig{
+							Type: graphql.NewNonNull(graphql.String),
+						},
+						"id": &graphql.ArgumentConfig{
+							Type: graphql.NewNonNull(graphql.Int),
+						},
+					},
+					Resolve: s.UpdateDocument,
+				},
+			},
 		},
 	)
 
-	var schema, _ = graphql.NewSchema(
+	schema, err := graphql.NewSchema(
 		graphql.SchemaConfig{
 			Query:    queryType,
 			Mutation: mutationType,
 		},
 	)
+	if err != nil {
+		log.Fatalf("[error] failed to create schema: %v", err)
+	}
 
 	s.router = mux.NewRouter()
 	s.router.HandleFunc("/graphql", func(w http.ResponseWriter, r *http.Request) {
@@ -157,6 +201,33 @@ func (s *Server) FindUserByID(p graphql.ResolveParams) (interface{}, error) {
 		QueryRow(context.Background(), `select id, email from users where id = $1`, id).
 		Scan(&user.ID, &user.Email)
 	return user, err
+}
+
+func (s *Server) CreateUser(p graphql.ResolveParams) (interface{}, error) {
+	log.Printf("[debug] create user with email: %s", p.Args["email"])
+	var u User
+	err := s.conn.
+		QueryRow(context.Background(), `insert into users (email) values ($1) returning id, email`, p.Args["email"]).
+		Scan(&u.ID, &u.Email)
+	return u, err
+}
+
+func (s *Server) CreateDocument(p graphql.ResolveParams) (interface{}, error) {
+	log.Printf("[debug] create document with author_id: %d, text: %s", p.Args["author_id"], p.Args["text"])
+	var d Document
+	err := s.conn.
+		QueryRow(context.Background(), `insert into documents (text, author_id) values ($1, $2) returning id, text, author_id`, p.Args["text"], p.Args["author_id"]).
+		Scan(&d.ID, &d.Text, &d.AuthorID)
+	return d, err
+}
+
+func (s *Server) UpdateDocument(p graphql.ResolveParams) (interface{}, error) {
+	log.Printf("[debug] update document with id: %d, text: %s", p.Args["id"], p.Args["text"])
+	var d Document
+	err := s.conn.
+		QueryRow(context.Background(), `update documents set text = $1 where id = $2 returning id, text, author_id`, p.Args["text"], p.Args["id"]).
+		Scan(&d.ID, &d.Text, &d.AuthorID)
+	return d, err
 }
 
 func (s *Server) FindDocumentsByAuthor(p graphql.ResolveParams) (interface{}, error) {
