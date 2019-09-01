@@ -14,6 +14,7 @@ func main() {
 	flag.StringVar(&config.Connect, "connect", "", "db connect string")
 	flag.StringVar(&config.Migrations, "migrations", "migrations", "migrations src")
 	flag.StringVar(&config.Templates, "templates", "templates", "templates src")
+	flag.StringVar(&config.SessionKey, "session_key", "session_key", "session key file")
 
 	flag.Parse()
 

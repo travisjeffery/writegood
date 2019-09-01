@@ -6,8 +6,19 @@
     <title>write good</title>
   </head>
   <body>
-    <h1>write good</h1>
+    <nav>
+      <h1>write good</h1>
+
+      <div class="login-container">
+        <form action="/login" method="POST">
+          Email: <input type="text" name="email">
+          <input type="submit" value="Log in">
+        </form>
+      </div>
+    </nav>
+
     <div id="app"></div>
     <script src='/static/app.js'></script>
+    <link rel="stylesheet" type="text/css" href="/static/style.css">
   </body>
 </html>

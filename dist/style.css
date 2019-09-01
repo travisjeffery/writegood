@@ -1,0 +1,11 @@
+.login-container {
+    float: right;
+}
+
+nav {
+    width: 100%;
+}
+
+nav h1 {
+    display: inline;
+}

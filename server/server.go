@@ -2,26 +2,28 @@ package server
 
 import (
 	"context"
+	"encoding/gob"
 	"encoding/json"
 	"fmt"
 	"html/template"
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 	"path"
 
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/gorilla/mux"
+	"github.com/gorilla/sessions"
 	"github.com/graphql-go/graphql"
 	"github.com/jackc/pgx/v4"
 )
 
 type User struct {
-	ID        int        `json:"id"`
-	Email     string     `json:"email"`
-	Documents []Document `json:"documents"`
+	ID    int    `json:"id"`
+	Email string `json:"email"`
 }
 
 type Document struct {
@@ -34,6 +36,7 @@ type Config struct {
 	Connect    string
 	Migrations string
 	Templates  string
+	SessionKey string
 }
 
 type Server struct {
@@ -42,6 +45,7 @@ type Server struct {
 	conn      *pgx.Conn
 	router    *mux.Router
 	templates *template.Template
+	sessions  sessions.Store
 	shutdown  chan struct{}
 }
 
@@ -49,12 +53,25 @@ type Server struct {
 func (s *Server) Run() error {
 	ctx := context.Background()
 	var err error
-	s.conn, err = pgx.Connect(ctx, s.Config.Connect)
 
+	s.conn, err = pgx.Connect(ctx, s.Config.Connect)
 	if err != nil {
 		log.Fatalf("[error] failed to connect to database: %v", err)
 	}
 	defer s.conn.Close(ctx)
+
+	f, err := os.Open(s.Config.SessionKey)
+	if err != nil {
+		log.Fatalf("[error] failed to open session key file: %v", err)
+	}
+	sessionKey, err := ioutil.ReadAll(f)
+	if err != nil {
+		log.Fatalf("[error] failed to read session key file: %v", err)
+	}
+	store := sessions.NewCookieStore(sessionKey)
+	store.Options.HttpOnly = true
+	store.Options.Secure = true
+	s.sessions = store
 
 	templateFiles, err := ioutil.ReadDir(s.Config.Templates)
 	var templateNames []string
@@ -181,6 +198,7 @@ func (s *Server) Run() error {
 	}
 
 	s.router = mux.NewRouter()
+
 	s.router.HandleFunc("/graphql", func(w http.ResponseWriter, r *http.Request) {
 		query := r.URL.Query().Get("query")
 		// TODO: better way to handle this?
@@ -207,6 +225,21 @@ func (s *Server) Run() error {
 			log.Printf("[error] failed to execute template: %v", err)
 		}
 	})
+
+	s.router.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
+		// send email to log in
+		if err := r.ParseForm(); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		email := r.Form.Get("email")
+		fmt.Printf("login with email: %s\n", email)
+		http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+	}).Methods("POST")
+
+	s.router.HandleFunc("/logout", func(w http.ResponseWriter, r *http.Request) {
+		// delete session
+	}).Methods("POST")
 
 	s.shutdown = make(chan struct{}, 1)
 	defer func() { <-s.shutdown }()
@@ -314,4 +347,9 @@ func (s *Server) ExecuteQuery(query string, schema graphql.Schema) *graphql.Resu
 		log.Printf("[error] errors: %v", result.Errors)
 	}
 	return result
+}
+
+func init() {
+	// so we can write users to session values
+	gob.Register(&User{})
 }
