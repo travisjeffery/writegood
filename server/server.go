@@ -18,7 +18,7 @@ import (
 type User struct {
 	ID        int
 	Email     string
-	Documents []*Document
+	Documents []Document
 }
 
 type Document struct {
@@ -73,7 +73,7 @@ func (s *Server) Run() error {
 				},
 				"documents": &graphql.Field{
 					Type:    graphql.NewList(documentType),
-					Resolve: s.ResolveAuthorDocuments,
+					Resolve: s.FindDocumentsByAuthor,
 				},
 			},
 		},
@@ -91,7 +91,7 @@ func (s *Server) Run() error {
 							Type: graphql.Int,
 						},
 					},
-					Resolve: s.ResolveUser,
+					Resolve: s.FindUserByID,
 				},
 			},
 		},
@@ -146,9 +146,8 @@ func (s *Server) MustMigrate() {
 	}
 }
 
-func (s *Server) ResolveUser(p graphql.ResolveParams) (interface{}, error) {
+func (s *Server) FindUserByID(p graphql.ResolveParams) (interface{}, error) {
 	id, ok := p.Args["id"].(int)
-	// hit db to find user
 	if !ok {
 		return nil, fmt.Errorf("id isn't an int")
 	}
@@ -160,7 +159,7 @@ func (s *Server) ResolveUser(p graphql.ResolveParams) (interface{}, error) {
 	return user, err
 }
 
-func (s *Server) ResolveAuthorDocuments(p graphql.ResolveParams) (interface{}, error) {
+func (s *Server) FindDocumentsByAuthor(p graphql.ResolveParams) (interface{}, error) {
 	user := p.Source.(User)
 	log.Printf("[debug] find documents for author with id: %d", user.ID)
 	var documents []Document
@@ -179,8 +178,17 @@ func (s *Server) ResolveAuthorDocuments(p graphql.ResolveParams) (interface{}, e
 	return documents, nil
 }
 
-func (s *Server) ResolveDocument(p graphql.ResolveParams) (interface{}, error) {
-	return nil, nil
+func (s *Server) FindDocumentByID(p graphql.ResolveParams) (interface{}, error) {
+	id, ok := p.Args["id"].(int)
+	if !ok {
+		return nil, fmt.Errorf("id isn't an int")
+	}
+	log.Printf("[debug] find document with id: %d", id)
+	var document Document
+	err := s.conn.
+		QueryRow(context.Background(), `select id, text, author_id from documents where id = $1`, id).
+		Scan(&document.ID, &document.Text, &document.AuthorID)
+	return document, err
 }
 
 func (s *Server) ExecuteQuery(query string, schema graphql.Schema) *graphql.Result {
