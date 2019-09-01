@@ -13,6 +13,8 @@
     "@babel/plugin-proposal-class-properties": "^7.5.5",
     "@babel/preset-env": "^7.5.5",
     "@babel/preset-react": "^7.0.0",
+    "@convertkit/slate-lists": "^0.2.4",
+    "antd": "^3.22.0",
     "babel-loader": "^8.0.6",
     "immutable": "^3.8.2",
     "react": "^16.9.0",
@@ -23,9 +25,7 @@
     "slate-paste-linkify": "^0.7.0",
     "slate-react": "^0.22.6",
     "webpack": "^4.39.2",
-    "webpack-cli": "^3.3.7",
-    "@convertkit/slate-lists": "^0.2.4"
+    "webpack-cli": "^3.3.7"
   },
-  "dependencies": {
-  }
+  "dependencies": {}
 }
