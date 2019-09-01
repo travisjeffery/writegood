@@ -12,7 +12,8 @@ func main() {
 	var config server.Config
 
 	flag.StringVar(&config.Connect, "connect", "", "db connect string")
-	flag.StringVar(&config.Migrations, "migrations", "", "migrations src")
+	flag.StringVar(&config.Migrations, "migrations", "migrations", "migrations src")
+	flag.StringVar(&config.Templates, "templates", "templates", "templates src")
 
 	flag.Parse()
 

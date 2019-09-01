@@ -4,8 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"html/template"
+	"io/ioutil"
 	"log"
 	"net/http"
+	"path"
 
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
@@ -30,14 +33,16 @@ type Document struct {
 type Config struct {
 	Connect    string
 	Migrations string
+	Templates  string
 }
 
 type Server struct {
 	Config Config
 
-	conn     *pgx.Conn
-	router   *mux.Router
-	shutdown chan struct{}
+	conn      *pgx.Conn
+	router    *mux.Router
+	templates *template.Template
+	shutdown  chan struct{}
 }
 
 // Run the Server.
@@ -50,6 +55,19 @@ func (s *Server) Run() error {
 		log.Fatalf("[error] failed to connect to database: %v", err)
 	}
 	defer s.conn.Close(ctx)
+
+	templateFiles, err := ioutil.ReadDir(s.Config.Templates)
+	var templateNames []string
+	if err != nil {
+		log.Fatalf("[error] failed to read templates dir: %v", err)
+	}
+	for _, f := range templateFiles {
+		templateNames = append(templateNames, path.Join(s.Config.Templates, f.Name()))
+	}
+	templates, err := template.ParseFiles(templateNames...)
+	if err != nil {
+		log.Fatalf("[error] failed to parse templates: %v", err)
+	}
 
 	var documentType = graphql.NewObject(
 		graphql.ObjectConfig{
@@ -180,8 +198,15 @@ func (s *Server) Run() error {
 			log.Printf("[error] failed to encode json: %v", err)
 		}
 	})
+
 	fs := http.FileServer(http.Dir("dist"))
-	s.router.PathPrefix("/").Handler(http.StripPrefix("/", fs))
+	s.router.PathPrefix("/static").Handler(http.StripPrefix("/static", fs))
+
+	s.router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if err := templates.Lookup("index.html").Execute(w, nil); err != nil {
+			log.Printf("[error] failed to execute template: %v", err)
+		}
+	})
 
 	s.shutdown = make(chan struct{}, 1)
 	defer func() { <-s.shutdown }()
