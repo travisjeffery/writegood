@@ -19,6 +19,7 @@ import (
 	"github.com/gorilla/sessions"
 	"github.com/graphql-go/graphql"
 	"github.com/jackc/pgx/v4"
+	"github.com/sendgrid/sendgrid-go"
 )
 
 type User struct {
@@ -33,10 +34,11 @@ type Document struct {
 }
 
 type Config struct {
-	Connect    string
-	Migrations string
-	Templates  string
-	SessionKey string
+	Connect        string
+	Migrations     string
+	Templates      string
+	SessionKey     string
+	SendgridAPIKey string
 }
 
 type Server struct {
@@ -47,6 +49,7 @@ type Server struct {
 	templates *template.Template
 	sessions  sessions.Store
 	shutdown  chan struct{}
+	email     *sendgrid.Client
 }
 
 // Run the Server.
@@ -59,6 +62,8 @@ func (s *Server) Run() error {
 		log.Fatalf("[error] failed to connect to database: %v", err)
 	}
 	defer s.conn.Close(ctx)
+
+	s.email = sendgrid.NewSendClient(s.Config.SendgridAPIKey)
 
 	f, err := os.Open(s.Config.SessionKey)
 	if err != nil {

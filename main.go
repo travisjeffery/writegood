@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"log"
+	"os"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/travisjeffery/writegood/server"
@@ -15,6 +16,7 @@ func main() {
 	flag.StringVar(&config.Migrations, "migrations", "migrations", "migrations src")
 	flag.StringVar(&config.Templates, "templates", "templates", "templates src")
 	flag.StringVar(&config.SessionKey, "session_key", "session_key", "session key file")
+	flag.StringVar(&config.SendGridAPIKey, "sendgrid_api_key", os.Getenv("SENDGRID_API_KEY"), "send grid api key")
 
 	flag.Parse()
 
