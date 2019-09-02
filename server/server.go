@@ -1,16 +1,20 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"encoding/gob"
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
 	"path"
+
+	"github.com/sendgrid/sendgrid-go/helpers/mail"
 
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
@@ -120,8 +124,10 @@ func (s *Server) Run() error {
 					Type: graphql.NewNonNull(graphql.String),
 				},
 				"documents": &graphql.Field{
-					Type:    graphql.NewList(documentType),
-					Resolve: s.FindDocumentsByAuthor,
+					Type: graphql.NewList(documentType),
+					Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+						return s.FindDocumentsByAuthor(p.Source.(User).ID)
+					},
 				},
 			},
 		},
@@ -139,7 +145,13 @@ func (s *Server) Run() error {
 							Type: graphql.Int,
 						},
 					},
-					Resolve: s.FindUserByID,
+					Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+						id, ok := p.Args["id"].(int)
+						if !ok {
+							return nil, fmt.Errorf("id isn't an int")
+						}
+						return s.FindUserByID(id)
+					},
 				},
 			},
 		},
@@ -157,7 +169,9 @@ func (s *Server) Run() error {
 							Type: graphql.NewNonNull(graphql.String),
 						},
 					},
-					Resolve: s.CreateUser,
+					Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+						return s.CreateUser(p.Args["email"].(string))
+					},
 				},
 				"createDocument": &graphql.Field{
 					Type:        documentType,
@@ -170,7 +184,9 @@ func (s *Server) Run() error {
 							Type: graphql.NewNonNull(graphql.Int),
 						},
 					},
-					Resolve: s.CreateDocument,
+					Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+						return s.CreateDocument(p.Args["author_id"].(int), p.Args["text"].(string))
+					},
 				},
 				"updateDocument": &graphql.Field{
 					Type:        documentType,
@@ -183,7 +199,9 @@ func (s *Server) Run() error {
 							Type: graphql.NewNonNull(graphql.Int),
 						},
 					},
-					Resolve: s.UpdateDocument,
+					Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+						return s.UpdateDocument(p.Args["id"].(int), p.Args["text"].(string))
+					},
 				},
 			},
 		},
@@ -232,25 +250,58 @@ func (s *Server) Run() error {
 		}
 	})
 
-	s.router.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
+	s.router.HandleFunc("/sign_in", func(w http.ResponseWriter, r *http.Request) {
 		// send email to log in
 		if err := r.ParseForm(); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 		email := r.Form.Get("email")
-		fmt.Printf("login with email: %s\n", email)
+		_, err := s.FindUserByEmail(email)
+		if err != nil {
+			_, _ = io.WriteString(w, "Email not found. Have you signed up?: "+email)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		var plain, html bytes.Buffer
+		if err = s.templates.Lookup("sign_in.txt").Execute(&plain, struct {
+			Token string
+		}{Token: "Hello"}); err != nil {
+			log.Printf("[error] failed to execute plain email: %v", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		if err = s.templates.Lookup("sign_in.html").Execute(&html, struct {
+			Token string
+		}{Token: "Hello"}); err != nil {
+			log.Printf("[error] failed to execute html email: %v", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		mail := mail.NewSingleEmail(
+			mail.NewEmail("Travis Jeffery", "tj@travisjeffery.com"),
+			"Sign in to Write Good",
+			mail.NewEmail("", email),
+			plain.String(),
+			html.String(),
+		)
+		_, err = s.email.Send(mail)
+		if err != nil {
+			log.Printf("[error] failed to send email: %v", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 	}).Methods("POST")
 
-	s.router.HandleFunc("/verify_login", func(w http.ResponseWriter, r *http.Request) {
+	s.router.HandleFunc("/sign_in/verify", func(w http.ResponseWriter, r *http.Request) {
 		// send email to log in
 		if err := r.ParseForm(); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 		email := r.Form.Get("email")
-		fmt.Printf("login with email: %s\n", email)
+		fmt.Printf("sign in with email: %s\n", email)
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 	}).Methods("GET")
 
@@ -283,11 +334,7 @@ func (s *Server) MustMigrate() {
 	}
 }
 
-func (s *Server) FindUserByID(p graphql.ResolveParams) (interface{}, error) {
-	id, ok := p.Args["id"].(int)
-	if !ok {
-		return nil, fmt.Errorf("id isn't an int")
-	}
+func (s *Server) FindUserByID(id int) (User, error) {
 	log.Printf("[debug] find user with id: %d", id)
 	var user User
 	err := s.conn.
@@ -296,38 +343,46 @@ func (s *Server) FindUserByID(p graphql.ResolveParams) (interface{}, error) {
 	return user, err
 }
 
-func (s *Server) CreateUser(p graphql.ResolveParams) (interface{}, error) {
-	log.Printf("[debug] create user with email: %s", p.Args["email"])
+func (s *Server) FindUserByEmail(email string) (User, error) {
+	log.Printf("[debug] find user with email: %d", email)
+	var user User
+	err := s.conn.
+		QueryRow(context.Background(), `select id, email from users where email = $1`, email).
+		Scan(&user.ID, &user.Email)
+	return user, err
+}
+
+func (s *Server) CreateUser(email string) (interface{}, error) {
+	log.Printf("[debug] create user with email: %s", email)
 	var u User
 	err := s.conn.
-		QueryRow(context.Background(), `insert into users (email) values ($1) returning id, email`, p.Args["email"]).
+		QueryRow(context.Background(), `insert into users (email) values ($1) returning id, email`, email).
 		Scan(&u.ID, &u.Email)
 	return u, err
 }
 
-func (s *Server) CreateDocument(p graphql.ResolveParams) (interface{}, error) {
-	log.Printf("[debug] create document with author_id: %d, text: %s", p.Args["author_id"], p.Args["text"])
+func (s *Server) CreateDocument(authorID int, text string) (interface{}, error) {
+	log.Printf("[debug] create document with author_id: %d, text: %s", authorID, text)
 	var d Document
 	err := s.conn.
-		QueryRow(context.Background(), `insert into documents (text, author_id) values ($1, $2) returning id, text, author_id`, p.Args["text"], p.Args["author_id"]).
+		QueryRow(context.Background(), `insert into documents (text, author_id) values ($1, $2) returning id, text, author_id`, text, authorID).
 		Scan(&d.ID, &d.Text, &d.AuthorID)
 	return d, err
 }
 
-func (s *Server) UpdateDocument(p graphql.ResolveParams) (interface{}, error) {
-	log.Printf("[debug] update document with id: %d, text: %s", p.Args["id"], p.Args["text"])
+func (s *Server) UpdateDocument(id int, text string) (interface{}, error) {
+	log.Printf("[debug] update document with id: %d, text: %s", id, text)
 	var d Document
 	err := s.conn.
-		QueryRow(context.Background(), `update documents set text = $1 where id = $2 returning id, text, author_id`, p.Args["text"], p.Args["id"]).
+		QueryRow(context.Background(), `update documents set text = $1 where id = $2 returning id, text, author_id`, text, id).
 		Scan(&d.ID, &d.Text, &d.AuthorID)
 	return d, err
 }
 
-func (s *Server) FindDocumentsByAuthor(p graphql.ResolveParams) (interface{}, error) {
-	user := p.Source.(User)
-	log.Printf("[debug] find documents for author with id: %d", user.ID)
+func (s *Server) FindDocumentsByAuthor(authorID int) (interface{}, error) {
+	log.Printf("[debug] find documents for author with id: %d", authorID)
 	var documents []Document
-	rows, err := s.conn.Query(context.Background(), `select id, text, author_id from documents where author_id = $1`, user.ID)
+	rows, err := s.conn.Query(context.Background(), `select id, text, author_id from documents where author_id = $1`, authorID)
 	if err != nil {
 		return nil, err
 	}
@@ -342,11 +397,7 @@ func (s *Server) FindDocumentsByAuthor(p graphql.ResolveParams) (interface{}, er
 	return documents, nil
 }
 
-func (s *Server) FindDocumentByID(p graphql.ResolveParams) (interface{}, error) {
-	id, ok := p.Args["id"].(int)
-	if !ok {
-		return nil, fmt.Errorf("id isn't an int")
-	}
+func (s *Server) FindDocumentByID(id int) (interface{}, error) {
 	log.Printf("[debug] find document with id: %d", id)
 	var document Document
 	err := s.conn.

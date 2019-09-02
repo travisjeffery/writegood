@@ -20,6 +20,7 @@ require (
 	github.com/sendgrid/rest v2.4.1+incompatible // indirect
 	github.com/sendgrid/sendgrid-go v3.5.0+incompatible
 	github.com/stretchr/objx v0.2.0 // indirect
+	github.com/stretchr/testify v1.4.0
 	golang.org/x/crypto v0.0.0-20190820162420-60c769a6c586 // indirect
 	golang.org/x/net v0.0.0-20190813141303-74dc4d7220e7 // indirect
 	golang.org/x/tools v0.0.0-20190823170909-c4a336ef6a2f // indirect
