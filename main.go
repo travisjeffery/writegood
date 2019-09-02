@@ -17,6 +17,7 @@ func main() {
 	flag.StringVar(&config.Templates, "templates", "templates", "templates src")
 	flag.StringVar(&config.SessionKey, "session_key", "session_key", "session key file")
 	flag.StringVar(&config.SendGridAPIKey, "sendgrid_api_key", os.Getenv("SENDGRID_API_KEY"), "send grid api key")
+	flag.StringVar(&config.Domain, "domain", "http://localhost:8080", "domain")
 
 	flag.Parse()
 

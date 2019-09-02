@@ -38,7 +38,8 @@ type Config struct {
 	Migrations     string
 	Templates      string
 	SessionKey     string
-	SendgridAPIKey string
+	SendGridAPIKey string
+	Domain         string
 }
 
 type Server struct {
@@ -63,7 +64,7 @@ func (s *Server) Run() error {
 	}
 	defer s.conn.Close(ctx)
 
-	s.email = sendgrid.NewSendClient(s.Config.SendgridAPIKey)
+	s.email = sendgrid.NewSendClient(s.Config.SendGridAPIKey)
 
 	f, err := os.Open(s.Config.SessionKey)
 	if err != nil {
@@ -239,8 +240,19 @@ func (s *Server) Run() error {
 		}
 		email := r.Form.Get("email")
 		fmt.Printf("login with email: %s\n", email)
-		http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+		http.Redirect(w, r, "/", http.StatusSeeOther)
 	}).Methods("POST")
+
+	s.router.HandleFunc("/verify_login", func(w http.ResponseWriter, r *http.Request) {
+		// send email to log in
+		if err := r.ParseForm(); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		email := r.Form.Get("email")
+		fmt.Printf("login with email: %s\n", email)
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+	}).Methods("GET")
 
 	s.router.HandleFunc("/logout", func(w http.ResponseWriter, r *http.Request) {
 		// delete session
