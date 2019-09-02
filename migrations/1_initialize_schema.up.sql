@@ -1,4 +1,10 @@
-create table users (id serial unique, email text, created timestamp with time zone, updated timestamp with time zone);
-
-
-create table documents (id serial, author_id integer references users (id), text text, created timestamp with time zone, updated timestamp with time zone);
+CREATE TABLE USERS (ID serial
+                      UNIQUE,
+                      EMAIL text, CREATED TIMESTAMP WITH TIME ZONE DEFAULT
+                      CURRENT_TIMESTAMP,
+                      UPDATED TIMESTAMP WITH TIME ZONE DEFAULT
+                      CURRENT_TIMESTAMP,
+                      SIGNED_IN TIMESTAMP WITH TIME ZONE);
+  CREATE TABLE DOCUMENTS (ID serial, AUTHOR_ID integer REFERENCES USERS (ID), text text, CREATED TIMESTAMP WITH TIME ZONE DEFAULT
+                            CURRENT_TIMESTAMP,
+                            UPDATED TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP);

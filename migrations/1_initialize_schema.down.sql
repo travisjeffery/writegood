@@ -1,4 +1,2 @@
-drop table users;
-
-
-drop table documents;
+DROP TABLE DOCUMENTS;
+  DROP TABLE USERS;

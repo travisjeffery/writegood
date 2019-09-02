@@ -5,6 +5,8 @@ go 1.12
 require (
 	github.com/coreos/go-systemd v0.0.0-20190719114852-fd7a80b32e1f // indirect
 	github.com/davecgh/go-spew v1.1.1
+	github.com/dgrijalva/jwt-go v3.2.0+incompatible
+	github.com/dgrijalva/jwt-go/v4 v4.0.0-20190521221207-07e10bec2a34 // indirect
 	github.com/docker/distribution v2.7.1+incompatible // indirect
 	github.com/docker/docker v1.13.1 // indirect
 	github.com/docker/go-units v0.4.0 // indirect
@@ -17,6 +19,7 @@ require (
 	github.com/jackc/pgx/v4 v4.0.0-pre2
 	github.com/kr/pty v1.1.8 // indirect
 	github.com/lib/pq v1.2.0
+	github.com/satori/go.uuid v1.2.0
 	github.com/sendgrid/rest v2.4.1+incompatible // indirect
 	github.com/sendgrid/sendgrid-go v3.5.0+incompatible
 	github.com/stretchr/objx v0.2.0 // indirect

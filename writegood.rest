@@ -1,17 +1,23 @@
+# get user by id
+
 POST http://localhost:8080/graphql?query={user(id:1){id email documents { text}}}
 
-#
+# get user by email
+
+POST http://localhost:8080/graphql?query={user(email:"tj@travisjeffery.com"){id created email documents { text}}}
+
+# create user
 
 POST http://localhost:8080/graphql?query=mutation {createUser(email: "callie@example.com"){id email documents { id text }}}
 
-#
+# create document
 
 POST http://localhost:8080/graphql?query=mutation {createDocument(author_id: 1, text: "what up homie?"){id text author_id}}
 
-#
+# update document
 
 POST http://localhost:8080/graphql?query=mutation {updateDocument(id: 2, text: "this is different"){id text author_id}}
 
-#
+# get homepage
 
 GET http://localhost:8080
