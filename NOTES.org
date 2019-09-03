@@ -1,0 +1,6 @@
+* Notes
+
+** How to store documents
+
+1 table for latest version of document.
+1 table for log of documents, each version of the document is its own row.
