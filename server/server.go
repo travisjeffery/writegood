@@ -14,9 +14,9 @@ import (
 	"log"
 	"net/http"
 	"path"
+	"strings"
 	"time"
 
-	"github.com/davecgh/go-spew/spew"
 	"github.com/dgrijalva/jwt-go"
 	uuid "github.com/satori/go.uuid"
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
@@ -30,6 +30,8 @@ import (
 	"github.com/jackc/pgx/v4"
 	"github.com/sendgrid/sendgrid-go"
 )
+
+const userSession = "user_session"
 
 type User struct {
 	ID       int        `json:"id"`
@@ -73,6 +75,7 @@ type Server struct {
 	sessions  sessions.Store
 	shutdown  chan struct{}
 	email     *sendgrid.Client
+	schema    graphql.Schema
 }
 
 // Run the Server.
@@ -107,7 +110,7 @@ func (s *Server) Run() error {
 
 	store := sessions.NewCookieStore(signKey)
 	store.Options.HttpOnly = true
-	store.Options.Secure = true
+	store.Options.Secure = !strings.Contains(s.Config.Domain, "localhost")
 	s.sessions = store
 
 	templateFiles, err := ioutil.ReadDir(s.Config.Templates)
@@ -248,7 +251,7 @@ func (s *Server) Run() error {
 		},
 	)
 
-	schema, err := graphql.NewSchema(
+	s.schema, err = graphql.NewSchema(
 		graphql.SchemaConfig{
 			Query:    queryType,
 			Mutation: mutationType,
@@ -258,46 +261,14 @@ func (s *Server) Run() error {
 		log.Fatalf("[error] failed to create schema: %v", err)
 	}
 
-	type jsonQuery struct {
-		Query string `json:"query"`
-	}
-
 	s.router = mux.NewRouter()
 
-	s.router.HandleFunc("/graphql", func(w http.ResponseWriter, r *http.Request) {
-		query := r.URL.Query().Get("query")
-		// TODO: better way to handle this?
-		if r.Header.Get("Content-Type") == "application/json" {
-			var q jsonQuery
-			if err := json.NewDecoder(r.Body).Decode(&q); err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-			query = q.Query
-		}
-		log.Printf("[debug] graphql: %s", query)
-		result := s.ExecuteQuery(query, schema)
-		if err := json.NewEncoder(w).Encode(result); err != nil {
-			log.Printf("[error] failed to encode json: %v", err)
-		}
-	})
-
-	fs := http.FileServer(http.Dir("dist"))
-	s.router.PathPrefix("/static").Handler(http.StripPrefix("/static", fs))
-
-	s.router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if err := s.templates.Lookup("index.html").Execute(w, nil); err != nil {
-			log.Printf("[error] failed to execute template: %v", err)
-		}
-	})
-
+	s.router.HandleFunc("/graphql", s.HandleGraphql)
+	s.router.PathPrefix("/static").Handler(http.StripPrefix("/static", http.FileServer(http.Dir("dist"))))
 	s.router.HandleFunc("/sign_in", s.HandleSignIn).Methods("POST")
-
 	s.router.HandleFunc("/sign_in/verify", s.HandleSignInVerify).Methods("GET")
-
-	s.router.HandleFunc("/logout", func(w http.ResponseWriter, r *http.Request) {
-		// delete session
-	}).Methods("POST")
+	s.router.HandleFunc("/sign_out", s.HandleSignOut)
+	s.router.HandleFunc("/", s.HandleHomepage)
 
 	s.shutdown = make(chan struct{}, 1)
 	defer func() { <-s.shutdown }()
@@ -335,6 +306,42 @@ func (s *Server) generateSignInHash(userID int, signedIn time.Time) string {
 		"%x",
 		sha256.Sum256([]byte(fmt.Sprintf("%s%d%d", s.Config.HashSalt, userID, signedIn.Nanosecond()))),
 	)
+}
+
+type jsonQuery struct {
+	Query string `json:"query"`
+}
+
+func (s *Server) HandleHomepage(w http.ResponseWriter, r *http.Request) {
+	if err := s.templates.Lookup("index.html").Execute(w, nil); err != nil {
+		log.Printf("[error] failed to execute template: %v", err)
+	}
+}
+
+func (s *Server) HandleGraphql(w http.ResponseWriter, r *http.Request) {
+	session, err := s.sessions.Get(r, userSession)
+	if err != nil {
+		log.Printf("[error] failed to get session: %v", err)
+	}
+	userID := session.Values["user_id"].(int)
+
+	query := r.URL.Query().Get("query")
+	// TODO: better way to handle this?
+	if r.Header.Get("Content-Type") == "application/json" {
+		var q jsonQuery
+		if err := json.NewDecoder(r.Body).Decode(&q); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		query = q.Query
+	}
+
+	fmt.Printf("[debug] graphql query for user: %d: query: %s", userID, query)
+
+	result := s.ExecuteQuery(query, s.schema)
+	if err := json.NewEncoder(w).Encode(result); err != nil {
+		log.Printf("[error] failed to encode json: %v", err)
+	}
 }
 
 func (s *Server) HandleSignIn(w http.ResponseWriter, r *http.Request) {
@@ -406,10 +413,12 @@ func (s *Server) HandleSignIn(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+	log.Printf("[debug] sent sign in verify email to user: %v", email)
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
 func (s *Server) HandleSignInVerify(w http.ResponseWriter, r *http.Request) {
+	// verify sign in
 	tokenStr := r.URL.Query().Get("token")
 	token, err := jwt.ParseWithClaims(tokenStr, &Claims{}, func(t *jwt.Token) (interface{}, error) {
 		return s.Config.verifyKey, nil
@@ -426,15 +435,47 @@ func (s *Server) HandleSignInVerify(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
+	log.Printf("[debug] verified sign in of user: %d", user.ID)
+
 	// create session
-	spew.Dump("verified", token, claims)
+	session, err := s.sessions.Get(r, userSession)
+	if err != nil {
+		log.Printf("[error] failed to get session: %v", err)
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	session.Values["user_id"] = user.ID
+	if err = s.sessions.Save(r, w, session); err != nil {
+		log.Printf("[error] failed to save session: %v", err)
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	log.Printf("[debug] saved session: %d", user.ID)
+
 	signedIn, err := s.UpdateUserSignedIn(user.ID, time.Now())
 	if err != nil {
 		log.Printf("[error] failed to verify claims for user: %d", user.ID)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+
 	user.SignedIn = &signedIn
+	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
+func (s *Server) HandleSignOut(w http.ResponseWriter, r *http.Request) {
+	session, err := s.sessions.Get(r, userSession)
+	if err != nil {
+		log.Printf("[error] failed to get session: %v", err)
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	session.Options.MaxAge = -1
+	if err = s.sessions.Save(r, w, session); err != nil {
+		log.Printf("[error] failed to save session: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
@@ -486,7 +527,7 @@ func (s *Server) UpdateDocument(id int, text string) (interface{}, error) {
 func (s *Server) UpdateUserSignedIn(id int, signedIn time.Time) (time.Time, error) {
 	log.Printf("[debug] update user with id: %d, signed in: %s", id, signedIn)
 	err := s.conn.
-		QueryRow(context.Background(), `update users set signed_in = $1 where id = $2 returning signed_in`, signedIn, id).
+		QueryRow(context.Background(), `update users set signed_in = $1, updated = $2 where id = $3 returning signed_in`, signedIn, time.Now(), id).
 		Scan(&signedIn)
 	return signedIn, err
 }
