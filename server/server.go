@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/davecgh/go-spew/spew"
 	"github.com/dgrijalva/jwt-go"
 	uuid "github.com/satori/go.uuid"
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
@@ -263,10 +264,11 @@ func (s *Server) Run() error {
 
 	s.router = mux.NewRouter()
 
+	s.router.PathPrefix("/static").
+		Handler(http.StripPrefix("/static", http.FileServer(http.Dir("dist"))))
 	s.router.HandleFunc("/graphql", s.HandleGraphql)
-	s.router.PathPrefix("/static").Handler(http.StripPrefix("/static", http.FileServer(http.Dir("dist"))))
 	s.router.HandleFunc("/sign_in", s.HandleSignIn).Methods("POST")
-	s.router.HandleFunc("/sign_in/verify", s.HandleSignInVerify).Methods("GET")
+	s.router.HandleFunc("/sign_in/verify", s.HandleSignInVerify)
 	s.router.HandleFunc("/sign_out", s.HandleSignOut)
 	s.router.HandleFunc("/", s.HandleHomepage)
 
@@ -313,17 +315,23 @@ type jsonQuery struct {
 }
 
 func (s *Server) HandleHomepage(w http.ResponseWriter, r *http.Request) {
-	if err := s.templates.Lookup("index.html").Execute(w, nil); err != nil {
+	data := struct {
+		User *User
+	}{
+		User: s.sessionUser(r),
+	}
+	spew.Dump(data)
+	if err := s.templates.Lookup("homepage.html").Execute(w, data); err != nil {
 		log.Printf("[error] failed to execute template: %v", err)
 	}
 }
 
 func (s *Server) HandleGraphql(w http.ResponseWriter, r *http.Request) {
-	session, err := s.sessions.Get(r, userSession)
-	if err != nil {
-		log.Printf("[error] failed to get session: %v", err)
-	}
-	userID := session.Values["user_id"].(int)
+	// session, err := s.sessions.Get(r, userSession)
+	// if err != nil {
+	// 	log.Printf("[error] failed to get session: %v", err)
+	// }
+	// user := session.Values["user"].(User)
 
 	query := r.URL.Query().Get("query")
 	// TODO: better way to handle this?
@@ -336,7 +344,7 @@ func (s *Server) HandleGraphql(w http.ResponseWriter, r *http.Request) {
 		query = q.Query
 	}
 
-	fmt.Printf("[debug] graphql query for user: %d: query: %s", userID, query)
+	// log.Printf("[debug] graphql query for user: %d: query: %s", user, query)
 
 	result := s.ExecuteQuery(query, s.schema)
 	if err := json.NewEncoder(w).Encode(result); err != nil {
@@ -417,6 +425,19 @@ func (s *Server) HandleSignIn(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
+func (s *Server) sessionUser(r *http.Request) *User {
+	session, err := s.sessions.Get(r, userSession)
+	if err != nil {
+		return nil
+	}
+	val, ok := session.Values["user"]
+	if !ok {
+		return nil
+	}
+	user := val.(*User)
+	return user
+}
+
 func (s *Server) HandleSignInVerify(w http.ResponseWriter, r *http.Request) {
 	// verify sign in
 	tokenStr := r.URL.Query().Get("token")
@@ -444,7 +465,7 @@ func (s *Server) HandleSignInVerify(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	session.Values["user_id"] = user.ID
+	session.Values["user"] = &user
 	if err = s.sessions.Save(r, w, session); err != nil {
 		log.Printf("[error] failed to save session: %v", err)
 		w.WriteHeader(http.StatusBadRequest)

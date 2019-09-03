@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>write good</title>
+  </head>
+  <body class="grid">
+    <nav class="flex-none grid grid-item">
+      <h1 class="logo grid-item">write good</h1>
+
+      <div class="menu grid-item one-third align-right">
+        <div class="menu-content">
+          {{if .User}}
+          {{.User.Email}} | <a href="/sign_out">sign out</a>
+          {{else}}
+          <form action="/sign_in" method="POST">
+            Email: <input type="text" name="email">
+            <input type="submit" value="Sign in">
+          </form>
+          {{end}}
+        </div>
+      </div>
+    </nav>
+
+    <div id="app" class="app grid">
+      <textarea class="grid-item" placeholder="Write..."></textarea>
+      <ul class="grid-item one-tenth">
+        <li>one</li>
+        <li>two</li>
+        <li>three</li>
+      </ul>
+    </div>
+
+    <footer class="footer flexbox-item">
+      <a class="footer-button" href="">Save Draft</a> <a class="footer-button" href="">Preview</a>
+    </footer>
+
+    <script src='/static/app.js'></script>
+    <link rel="stylesheet" type="text/css" href="/static/style.css">
+  </body>
+</html>
