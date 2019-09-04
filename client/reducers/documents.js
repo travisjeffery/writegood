@@ -1,4 +1,6 @@
-const documents = (state = [], action) => {
+const initialState = [{text: "Hello world"}]
+
+const documents = (state = initialState, action) => {
   return state
 }
 

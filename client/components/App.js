@@ -5,7 +5,6 @@ import Editor from '../containers/Editor'
 const App = () => (
   <div>
     <Editor />
-    <DocumentList />
   </div>
 )
 
