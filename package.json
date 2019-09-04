@@ -18,10 +18,14 @@
     "antd": "^3.22.0",
     "apollo-boost": "^0.4.4",
     "babel-loader": "^8.0.6",
+    "babel-plugin-module-resolver": "^3.2.0",
+    "babel-plugin-transform-react-jsx": "^6.24.1",
     "graphql": "^14.5.4",
     "immutable": "^3.8.2",
     "react": "^16.9.0",
     "react-dom": "^16.9.0",
+    "react-redux": "^7.1.1",
+    "redux": "^4.0.4",
     "slate": "^0.47.8",
     "slate-drop-or-paste-images": "^0.9.1",
     "slate-no-empty": "^0.1.0",
@@ -30,7 +34,5 @@
     "webpack": "^4.39.2",
     "webpack-cli": "^3.3.7"
   },
-  "dependencies": {
-    "turbolinks": "^5.2.0"
-  }
+  "dependencies": {}
 }

@@ -1,12 +1,14 @@
 module.exports = {
   context: __dirname + "/client",
-  entry: "./app.js",
+  entry: "./index.js",
   mode: 'development',
 
   output: {
-    filename: "app.js",
+    filename: "index.js",
     path: __dirname + "/dist",
   },
+
+  devtool: 'inline-source-map',
 
   module: {
     rules: [
@@ -21,7 +23,7 @@ module.exports = {
               '@babel/preset-react',
               {
                 "plugins": [
-                  "@babel/plugin-proposal-class-properties"
+                  "@babel/plugin-proposal-class-properties",
                 ]
               },
             ]
