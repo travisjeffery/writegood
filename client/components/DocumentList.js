@@ -1,8 +1,8 @@
 import React from 'react'
 import Document from './Document'
 
-const DocumentList = ({documents}) => (
-  <ul>
+const DocumentList = ({documents, style}) => (
+  <ul style={style}>
     {documents.map(document =>
       <Document {...document} />
     )}

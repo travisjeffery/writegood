@@ -8,6 +8,25 @@ import { createStore } from 'redux'
 import { Provider } from 'react-redux'
 import App from './components/App'
 import rootReducer from './reducers'
+import '@shopify/polaris/styles.css';
+import { AppProvider } from '@shopify/polaris'
+import { Frame, Page, Card, Layout } from '@shopify/polaris'
+import TopBar from './components/TopBar'
+
+
+const theme = {
+  colors: {
+    topBar: {
+      background: '#fcda05',
+    },
+  },
+  logo: {
+    width: 124,
+    topBarSource:
+    '/static/logo_transparent.png',
+    accessibilityLabel: 'WriteGood',
+  },
+};
 
 const client = new ApolloClient({
   uri: 'http://localhost:8080/graphql',
@@ -19,11 +38,16 @@ client.
 
 const store = createStore(
   rootReducer,
-  window.__REDUX_DEVTOOLS_EXTENSION__ && window.__REDUX_DEVTOOLS_EXTENSION__()p
+  window.__REDUX_DEVTOOLS_EXTENSION__ && window.__REDUX_DEVTOOLS_EXTENSION__()
 )
 
-render(<Provider store={store}>
-         <App />
-       </Provider>,
-       document.getElementById("app")
-      )
+render(
+  <AppProvider theme={theme}>
+    <Provider store={store}>
+      <Frame topBar={<TopBar />}>
+        <App />
+      </Frame>
+    </Provider>
+  </AppProvider>,
+  document.getElementById("app")
+)

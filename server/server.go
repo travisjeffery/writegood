@@ -377,7 +377,7 @@ func (s *Server) HandleSignIn(w http.ResponseWriter, r *http.Request) {
 		UserID: user.ID,
 		Hash:   hash,
 		StandardClaims: jwt.StandardClaims{
-			Issuer:    "Write Good",
+			Issuer:    "WriteGood",
 			Id:        uuid.NewV4().String(),
 			IssuedAt:  now.Unix(),
 			ExpiresAt: now.Add(s.Config.SignInExpire).Unix(),
@@ -410,7 +410,7 @@ func (s *Server) HandleSignIn(w http.ResponseWriter, r *http.Request) {
 	}
 	mail := mail.NewSingleEmail(
 		mail.NewEmail(s.Config.FromName, s.Config.FromAccount),
-		"Sign in to Write Good",
+		"Sign in to WriteGood",
 		mail.NewEmail("", email),
 		plain.String(),
 		html.String(),

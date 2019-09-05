@@ -1,5 +1,9 @@
 * Notes
 
+** An anonymous user has their document saved in local storage, when they sign up we take their existing document and make it the user's first document.
+
+** On start up open most recent document (if the user has one) otherwise create a new one
+
 ** How to store documents
 
 1 table for latest version of document.
