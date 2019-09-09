@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package api.v1;
+
+enum Type {
+  Unknown = 0;
+  File = 1;
+  Directory = 2;
+}
+
+message Object {
+  string name = 1;
+  Type type = 2;
+  repeated Object contents = 3;
+}
+
+message CreateInput {
+  Object object = 1;
+}
+
+message CreateOutput {
+
+}
+
+service Api {
+  Create()
+}

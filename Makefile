@@ -13,3 +13,7 @@ migrate-down:
 .PHONY: migrate-up
 migrate-up:
 	migrate -source file://migrations -database postgres://postgres@localhost:5432/writegood up 1
+
+.PHONY: migrate-force
+migrate-force:
+	migrate -source file://migrations -database postgres://postgres@localhost:5432/writegood force $(VERSION)

@@ -30,53 +30,61 @@ import (
 	"github.com/graphql-go/graphql"
 	"github.com/jackc/pgx/v4"
 	"github.com/sendgrid/sendgrid-go"
+	"github.com/travisjeffery/writegood/store"
 )
 
 const userSession = "user_session"
-
-type User struct {
-	ID       int        `json:"id"`
-	Email    string     `json:"email"`
-	SignedIn *time.Time `json:"signed_in"`
-	Created  time.Time  `json:"signed_in"`
-	Updated  time.Time  `json:"signed_in"`
-}
-
-type Document struct {
-	ID       int       `json:"id"`
-	Text     string    `json:"text"`
-	AuthorID int       `json:"author_id"`
-	Created  time.Time `json:"created"`
-	Updated  time.Time `json:"updated"`
-}
 
 type Config struct {
 	Connect        string
 	Migrations     string
 	Templates      string
-	VerifyKey      string
-	SignKey        string
+	VerifyKeyPath  string
+	SignKeyPath    string
 	SendGridAPIKey string
 	Domain         string
 	FromAccount    string
 	FromName       string
 	HashSalt       string
 	SignInExpire   time.Duration
+	// RawSignKey set in setup.
+	RawSignKey []byte
+	// SignKey set in setup.
+	SignKey *rsa.PrivateKey
+	// VerifyKey set in setup.
+	VerifyKey *rsa.PublicKey
+}
 
-	signKey   *rsa.PrivateKey
-	verifyKey *rsa.PublicKey
+func (c *Config) MustSetup() {
+	var err error
+	c.RawSignKey, err = ioutil.ReadFile(c.SignKeyPath)
+	if err != nil {
+		log.Fatalf("[error] failed to read sign key file: %v", err)
+	}
+	c.SignKey, err = jwt.ParseRSAPrivateKeyFromPEM(c.RawSignKey)
+	if err != nil {
+		log.Fatalf("[error] failed to parse sign key file: %v", err)
+	}
+	verifyKey, err := ioutil.ReadFile(c.VerifyKeyPath)
+	if err != nil {
+		log.Fatalf("[error] failed to read verify key file: %v", err)
+	}
+	c.VerifyKey, err = jwt.ParseRSAPublicKeyFromPEM(verifyKey)
+	if err != nil {
+		log.Fatalf("[error] failed to parse sign key file: %v", err)
+	}
 }
 
 type Server struct {
 	Config Config
 
-	conn      *pgx.Conn
 	router    *mux.Router
 	templates *template.Template
 	sessions  sessions.Store
 	shutdown  chan struct{}
 	email     *sendgrid.Client
 	schema    graphql.Schema
+	store     *store.Store
 }
 
 // Run the Server.
@@ -84,41 +92,29 @@ func (s *Server) Run() error {
 	ctx := context.Background()
 	var err error
 
-	s.conn, err = pgx.Connect(ctx, s.Config.Connect)
+	s.Config.MustSetup()
+
+	conn, err := pgx.Connect(ctx, s.Config.Connect)
 	if err != nil {
 		log.Fatalf("[error] failed to connect to database: %v", err)
 	}
-	defer s.conn.Close(ctx)
+	defer conn.Close(ctx)
+
+	s.store = &store.Store{Conn: conn}
 
 	s.email = sendgrid.NewSendClient(s.Config.SendGridAPIKey)
 
-	signKey, err := ioutil.ReadFile(s.Config.SignKey)
-	if err != nil {
-		log.Fatalf("[error] failed to read sign key file: %v", err)
-	}
-	s.Config.signKey, err = jwt.ParseRSAPrivateKeyFromPEM(signKey)
-	if err != nil {
-		log.Fatalf("[error] failed to parse sign key file: %v", err)
-	}
-	verifyKey, err := ioutil.ReadFile(s.Config.VerifyKey)
-	if err != nil {
-		log.Fatalf("[error] failed to read verify key file: %v", err)
-	}
-	s.Config.verifyKey, err = jwt.ParseRSAPublicKeyFromPEM(verifyKey)
-	if err != nil {
-		log.Fatalf("[error] failed to parse sign key file: %v", err)
-	}
-
-	store := sessions.NewCookieStore(signKey)
-	store.Options.HttpOnly = true
-	store.Options.Secure = !strings.Contains(s.Config.Domain, "localhost")
-	s.sessions = store
+	sessionStore := sessions.NewCookieStore(s.Config.RawSignKey)
+	sessionStore.Options.HttpOnly = true
+	sessionStore.Options.Secure = !strings.Contains(s.Config.Domain, "localhost")
+	s.sessions = sessionStore
 
 	templateFiles, err := ioutil.ReadDir(s.Config.Templates)
-	var templateNames []string
 	if err != nil {
 		log.Fatalf("[error] failed to read templates dir: %v", err)
 	}
+
+	var templateNames []string
 	for _, f := range templateFiles {
 		templateNames = append(templateNames, path.Join(s.Config.Templates, f.Name()))
 	}
@@ -164,7 +160,7 @@ func (s *Server) Run() error {
 				"documents": &graphql.Field{
 					Type: graphql.NewList(documentType),
 					Resolve: func(p graphql.ResolveParams) (interface{}, error) {
-						return s.FindDocumentsByAuthor(p.Source.(User).ID)
+						return s.store.FindDocumentsByAuthor(p.Source.(store.User).ID)
 					},
 				},
 			},
@@ -189,11 +185,11 @@ func (s *Server) Run() error {
 					Resolve: func(p graphql.ResolveParams) (interface{}, error) {
 						id, ok := p.Args["id"].(int)
 						if ok {
-							return s.FindUserByID(id)
+							return s.store.FindUserByID(id)
 						}
 						email, ok := p.Args["email"].(string)
 						if ok {
-							return s.FindUserByEmail(email)
+							return s.store.FindUserByEmail(email)
 						}
 						return nil, fmt.Errorf("neither id nor email arg set")
 					},
@@ -215,7 +211,7 @@ func (s *Server) Run() error {
 						},
 					},
 					Resolve: func(p graphql.ResolveParams) (interface{}, error) {
-						return s.CreateUser(p.Args["email"].(string))
+						return s.store.CreateUser(p.Args["email"].(string))
 					},
 				},
 				"createDocument": &graphql.Field{
@@ -230,7 +226,7 @@ func (s *Server) Run() error {
 						},
 					},
 					Resolve: func(p graphql.ResolveParams) (interface{}, error) {
-						return s.CreateDocument(p.Args["author_id"].(int), p.Args["text"].(string))
+						return s.store.CreateDocument(p.Args["author_id"].(int), p.Args["text"].(string))
 					},
 				},
 				"updateDocument": &graphql.Field{
@@ -245,7 +241,7 @@ func (s *Server) Run() error {
 						},
 					},
 					Resolve: func(p graphql.ResolveParams) (interface{}, error) {
-						return s.UpdateDocument(p.Args["id"].(int), p.Args["text"].(string))
+						return s.store.UpdateDocument(p.Args["id"].(int), p.Args["text"].(string))
 					},
 				},
 			},
@@ -316,7 +312,7 @@ type jsonQuery struct {
 
 func (s *Server) HandleHomepage(w http.ResponseWriter, r *http.Request) {
 	data := struct {
-		User *User
+		User *store.User
 	}{
 		User: s.sessionUser(r),
 	}
@@ -359,14 +355,14 @@ func (s *Server) HandleSignIn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	email := r.Form.Get("email")
-	user, err := s.FindUserByEmail(email)
+	user, err := s.store.FindUserByEmail(email)
 	if err != nil {
 		_, _ = io.WriteString(w, "Email not found: "+email)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 	now := time.Now()
-	signedIn, err := s.UpdateUserSignedIn(user.ID, now)
+	signedIn, err := s.store.UpdateUserSignedIn(user.ID, now)
 	if err != nil {
 		log.Printf("[error] failed to update user signed in: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -384,7 +380,7 @@ func (s *Server) HandleSignIn(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
-	signedToken, err := token.SignedString(s.Config.signKey)
+	signedToken, err := token.SignedString(s.Config.SignKey)
 	if err != nil {
 		log.Printf("[error] failed to sign token: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -425,7 +421,7 @@ func (s *Server) HandleSignIn(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
-func (s *Server) sessionUser(r *http.Request) *User {
+func (s *Server) sessionUser(r *http.Request) *store.User {
 	session, err := s.sessions.Get(r, userSession)
 	if err != nil {
 		return nil
@@ -434,7 +430,7 @@ func (s *Server) sessionUser(r *http.Request) *User {
 	if !ok {
 		return nil
 	}
-	user := val.(*User)
+	user := val.(*store.User)
 	return user
 }
 
@@ -442,10 +438,10 @@ func (s *Server) HandleSignInVerify(w http.ResponseWriter, r *http.Request) {
 	// verify sign in
 	tokenStr := r.URL.Query().Get("token")
 	token, err := jwt.ParseWithClaims(tokenStr, &Claims{}, func(t *jwt.Token) (interface{}, error) {
-		return s.Config.verifyKey, nil
+		return s.Config.VerifyKey, nil
 	})
 	claims := token.Claims.(*Claims)
-	user, err := s.FindUserByID(claims.UserID)
+	user, err := s.store.FindUserByID(claims.UserID)
 	if err != nil {
 		log.Printf("[error] failed to find user by id: %d: %v", claims.UserID, err)
 		w.WriteHeader(http.StatusBadRequest)
@@ -473,7 +469,7 @@ func (s *Server) HandleSignInVerify(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("[debug] saved session: %d", user.ID)
 
-	signedIn, err := s.UpdateUserSignedIn(user.ID, time.Now())
+	signedIn, err := s.store.UpdateUserSignedIn(user.ID, time.Now())
 	if err != nil {
 		log.Printf("[error] failed to verify claims for user: %d", user.ID)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -500,86 +496,6 @@ func (s *Server) HandleSignOut(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
-func (s *Server) FindUserByID(id int) (User, error) {
-	log.Printf("[debug] find user with id: %d", id)
-	var user User
-	err := s.conn.
-		QueryRow(context.Background(), `select id, email, created, updated, signed_in from users where id = $1`, id).
-		Scan(&user.ID, &user.Email, &user.Created, &user.Updated, &user.SignedIn)
-	return user, err
-}
-
-func (s *Server) FindUserByEmail(email string) (User, error) {
-	log.Printf("[debug] find user with email: %s", email)
-	var user User
-	err := s.conn.
-		QueryRow(context.Background(), `select id, email, created, updated, signed_in from users where email = $1`, email).
-		Scan(&user.ID, &user.Email, &user.Created, &user.Updated, &user.SignedIn)
-	return user, err
-}
-
-func (s *Server) CreateUser(email string) (interface{}, error) {
-	log.Printf("[debug] create user with email: %s", email)
-	var user User
-	err := s.conn.
-		QueryRow(context.Background(), `insert into users (email) values ($1) returning id, email, created, updated, signed_in`, email).
-		Scan(&user.ID, &user.Email, &user.Created, &user.Updated, &user.SignedIn)
-	return user, err
-}
-
-func (s *Server) CreateDocument(authorID int, text string) (interface{}, error) {
-	log.Printf("[debug] create document with author_id: %d, text: %s", authorID, text)
-	var d Document
-	err := s.conn.
-		QueryRow(context.Background(), `insert into documents (text, author_id) values ($1, $2) returning id, text, author_id`, text, authorID).
-		Scan(&d.ID, &d.Text, &d.AuthorID)
-	return d, err
-}
-
-func (s *Server) UpdateDocument(id int, text string) (interface{}, error) {
-	log.Printf("[debug] update document with id: %d, text: %s", id, text)
-	var d Document
-	err := s.conn.
-		QueryRow(context.Background(), `update documents set text = $1 where id = $2 returning id, text, author_id`, text, id).
-		Scan(&d.ID, &d.Text, &d.AuthorID)
-	return d, err
-}
-
-func (s *Server) UpdateUserSignedIn(id int, signedIn time.Time) (time.Time, error) {
-	log.Printf("[debug] update user with id: %d, signed in: %s", id, signedIn)
-	err := s.conn.
-		QueryRow(context.Background(), `update users set signed_in = $1, updated = $2 where id = $3 returning signed_in`, signedIn, time.Now(), id).
-		Scan(&signedIn)
-	return signedIn, err
-}
-
-func (s *Server) FindDocumentsByAuthor(authorID int) (interface{}, error) {
-	log.Printf("[debug] find documents for author with id: %d", authorID)
-	var documents []Document
-	rows, err := s.conn.Query(context.Background(), `select id, text, author_id from documents where author_id = $1`, authorID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var d Document
-		if err = rows.Scan(&d.ID, &d.Text, &d.AuthorID); err != nil {
-			return nil, err
-		}
-		documents = append(documents, d)
-	}
-	return documents, nil
-}
-
-func (s *Server) FindDocumentByID(id int) (interface{}, error) {
-	log.Printf("[debug] find document with id: %d", id)
-	var document Document
-	err := s.conn.
-		QueryRow(context.Background(), `select id, text, author_id from documents where id = $1`, id).
-		Scan(&document.ID, &document.Text, &document.AuthorID)
-	return document, err
-}
-
 func (s *Server) ExecuteQuery(query string, schema graphql.Schema) *graphql.Result {
 	result := graphql.Do(graphql.Params{
 		Schema:        schema,
@@ -593,5 +509,5 @@ func (s *Server) ExecuteQuery(query string, schema graphql.Schema) *graphql.Resu
 
 func init() {
 	// so we can write users to session values
-	gob.Register(&User{})
+	gob.Register(&store.User{})
 }
